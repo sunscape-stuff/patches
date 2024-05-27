@@ -1,0 +1,79 @@
+From 16c431e8d5e19a5c945a58e365c3707ef2cd60e1 Mon Sep 17 00:00:00 2001
+From: Adithya R <gh0strider.2k18.reborn@gmail.com>
+Date: Sat, 2 Sep 2023 22:15:44 +0530
+Subject: [PATCH] SF: Defer setDesiredMode when display is off
+
+This is required on some devices with video mode panel, since the
+scheduler sets refresh rate to 120 Hz _after_ turning screen off at
+60 Hz (VRR idle) but the HWC ignores this and when the display is
+turned back on SF thinks we are back at 120 Hz while HWC is still
+rendering at 60 Hz. Defer setting refresh rate until the screen is
+turned back on, to avoid this confusion.
+
+To enable, set: debug.sf.defer_refresh_rate_when_off=1
+
+Change-Id: I3e531e601e9cb015b3066ae98d4d9c5436b46619
+---
+ services/surfaceflinger/SurfaceFlinger.cpp | 14 ++++++++++++++
+ services/surfaceflinger/SurfaceFlinger.h   |  6 ++++++
+ 2 files changed, 20 insertions(+)
+
+diff --git a/services/surfaceflinger/SurfaceFlinger.cpp b/services/surfaceflinger/SurfaceFlinger.cpp
+index 305e08c714..16d100f651 100644
+--- a/services/surfaceflinger/SurfaceFlinger.cpp
++++ b/services/surfaceflinger/SurfaceFlinger.cpp
+@@ -523,6 +523,9 @@ SurfaceFlinger::SurfaceFlinger(Factory& factory) : SurfaceFlinger(factory, SkipI
+     property_get("debug.sf.dim_in_gamma_in_enhanced_screenshots", value, 0);
+     mDimInGammaSpaceForEnhancedScreenshots = atoi(value);
+ 
++    property_get("debug.sf.defer_refresh_rate_when_off", value, "0");
++    mDeferRefreshRateWhenOff = atoi(value);
++
+     mIgnoreHwcPhysicalDisplayOrientation =
+             base::GetBoolProperty("debug.sf.ignore_hwc_physical_display_orientation"s, false);
+ 
+@@ -1249,6 +1252,12 @@ void SurfaceFlinger::setDesiredMode(display::DisplayModeRequest&& request, bool
+         return;
+     }
+ 
++    if (mDeferRefreshRateWhenOff && display->getPowerMode() == hal::PowerMode::OFF) {
++        ALOGI("%s: deferring because display is powered off", __func__);
++        mLastActiveMode = request.mode;
++        return;
++    }
++
+     const auto mode = request.mode;
+     const bool emitEvent = request.emitEvent;
+ 
+@@ -5964,6 +5973,11 @@ void SurfaceFlinger::setPowerModeInternal(const sp<DisplayDevice>& display, hal:
+         }
+ 
+         getHwComposer().setPowerMode(displayId, mode);
++        if (mLastActiveMode) {
++            ALOGI("Deferred active mode change pending, applying now");
++            setDesiredMode({mLastActiveMode.value()}, true);
++            mLastActiveMode = std::nullopt;
++        }
+         if (mode != hal::PowerMode::DOZE_SUSPEND &&
+             (displayId == mActiveDisplayId || FlagManager::getInstance().multithreaded_present())) {
+             const bool enable =
+diff --git a/services/surfaceflinger/SurfaceFlinger.h b/services/surfaceflinger/SurfaceFlinger.h
+index 913f1778be..0f7d86112c 100644
+--- a/services/surfaceflinger/SurfaceFlinger.h
++++ b/services/surfaceflinger/SurfaceFlinger.h
+@@ -1381,6 +1381,12 @@ private:
+     scheduler::PresentLatencyTracker mPresentLatencyTracker GUARDED_BY(kMainThreadContext);
+ 
+     bool mLumaSampling = true;
++    bool mForceLightBrightness = false;
++    bool mForceHwcBrightness = false;
++
++    bool mDeferRefreshRateWhenOff = false;
++    std::optional<scheduler::FrameRateMode> mLastActiveMode GUARDED_BY(mStateLock);
++
+     sp<RegionSamplingThread> mRegionSamplingThread;
+     sp<FpsReporter> mFpsReporter;
+     sp<TunnelModeEnabledReporter> mTunnelModeEnabledReporter;
+-- 
+2.45.1
+

@@ -1,0 +1,31 @@
+From 84e5e4b662eb0da9fc30533734037d2a39742cf4 Mon Sep 17 00:00:00 2001
+From: ralph950412 <ralph950412@gmail.com>
+Date: Mon, 11 Dec 2023 16:38:40 +0800
+Subject: [PATCH] sensors: Do not limit aidl-multihal visibility
+
+Allowing custom sensor implementations for vendors
+
+Change-Id: I9e2b6e8f312ddc85074504a17087d121835a1ca3
+---
+ sensors/aidl/default/multihal/Android.bp | 5 -----
+ 1 file changed, 5 deletions(-)
+
+diff --git a/sensors/aidl/default/multihal/Android.bp b/sensors/aidl/default/multihal/Android.bp
+index a20d6d743..40cb2d90a 100644
+--- a/sensors/aidl/default/multihal/Android.bp
++++ b/sensors/aidl/default/multihal/Android.bp
+@@ -45,11 +45,6 @@ cc_library_static {
+         "HalProxyAidl.cpp",
+         "ConvertUtils.cpp",
+     ],
+-    visibility: [
+-        ":__subpackages__",
+-        "//hardware/interfaces/sensors/aidl/multihal:__subpackages__",
+-        "//hardware/interfaces/tests/extension/sensors:__subpackages__",
+-    ],
+     static_libs: [
+         "android.hardware.sensors@1.0-convert",
+         "android.hardware.sensors@2.X-multihal",
+-- 
+2.45.1
+
